@@ -26,3 +26,6 @@ print(inst.query("FUNC?"))
 while True:
     print(inst.query('MEAS?'))
     time.sleep(0.5)
+
+def get_data(inst):
+    return inst.query("MEAS?")
