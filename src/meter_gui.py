@@ -4,13 +4,15 @@ from tkinter import ttk
 import tkinter.messagebox as messagebox
 from typing import Optional
 
-try:
-    from PIL import Image, ImageDraw, ImageFont, ImageTk, ImageFilter
-    PIL_AVAILABLE = True
-except Exception:
-    PIL_AVAILABLE = False
+# try:
+# from PIL import Image, ImageDraw, ImageFont, ImageTk, ImageFilter
+#     PIL_AVAILABLE = True
+# except Exception:
+#     PIL_AVAILABLE = False
 
-from .pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter
+PIL_AVAILABLE = False
+
+from pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter
 
 
 class MeterGUI(ctk.CTk):
@@ -235,63 +237,63 @@ class MeterGUI(ctk.CTk):
     # -----------------------------
     # LED rendering / animation
     # -----------------------------
-    def _render_led(self, text: str, unit: str, size=(540, 120)):
-        if not PIL_AVAILABLE:
-            # fallback: return None
-            return None
-        w, h = size
-        img = Image.new('RGBA', (w, h), (12, 12, 12, 255))
-        draw = ImageDraw.Draw(img)
-        try:
-            font = ImageFont.truetype('DejaVuSans-Bold.ttf', 56)
-        except Exception:
-            font = ImageFont.load_default()
+    # def _render_led(self, text: str, unit: str, size=(540, 120)):
+    #     if not PIL_AVAILABLE:
+    #         # fallback: return None
+    #         return None
+    #     w, h = size
+    #     img = Image.new('RGBA', (w, h), (12, 12, 12, 255))
+    #     draw = ImageDraw.Draw(img)
+    #     try:
+    #         font = ImageFont.truetype('DejaVuSans-Bold.ttf', 56)
+    #     except Exception:
+    #         font = ImageFont.load_default()
+    #
+    #     txt = f"{text} {unit}" if unit else text
+    #     tw, th = draw.textsize(txt, font=font)
+    #     x = 12
+    #     y = (h - th) // 2
+    #
+    #     # glow layers
+    #     for blur_r, alpha in ((10, 30), (6, 90), (2, 180)):
+    #         glow = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    #         gdraw = ImageDraw.Draw(glow)
+    #         gdraw.text((x, y), txt, font=font, fill=(0, 140, 255, alpha))
+    #         glow = glow.filter(ImageFilter.GaussianBlur(radius=blur_r))
+    #         img = Image.alpha_composite(img, glow)
+    #
+    #     draw = ImageDraw.Draw(img)
+    #     draw.text((x, y), txt, font=font, fill=(230, 245, 255, 255))
+    #     return img
 
-        txt = f"{text} {unit}" if unit else text
-        tw, th = draw.textsize(txt, font=font)
-        x = 12
-        y = (h - th) // 2
-
-        # glow layers
-        for blur_r, alpha in ((10, 30), (6, 90), (2, 180)):
-            glow = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-            gdraw = ImageDraw.Draw(glow)
-            gdraw.text((x, y), txt, font=font, fill=(0, 140, 255, alpha))
-            glow = glow.filter(ImageFilter.GaussianBlur(radius=blur_r))
-            img = Image.alpha_composite(img, glow)
-
-        draw = ImageDraw.Draw(img)
-        draw.text((x, y), txt, font=font, fill=(230, 245, 255, 255))
-        return img
-
-    def _update_led_transition(self, new_text: str, unit: str):
-        try:
-            new_img = self._render_led(new_text, unit, size=(540, 120))
-            old_img = self._led_img or new_img
-            steps = 6
-            for i in range(steps):
-                alpha = (i + 1) / steps
-                blended = Image.blend(old_img.convert('RGBA'), new_img.convert('RGBA'), alpha)
-                photo = ImageTk.PhotoImage(blended)
-                self._display_label.configure(image=photo)
-                self._display_label.image = photo
-                self.update_idletasks()
-                self.after(30)
-            self._led_img = new_img
-            if PIL_AVAILABLE:
-                self._led_photo = ImageTk.PhotoImage(self._led_img)
-                self._display_label.configure(image=self._led_photo, text='')
-                self._display_label.image = self._led_photo
-            else:
-                self._display_label.configure(text=new_text)
-            self._unit_label.configure(text=unit)
-        except Exception:
-            # fallback show text
-            try:
-                self._display_label.configure(text=new_text)
-                self._unit_label.configure(text=unit)
-            except Exception:
-                pass
+    # def _update_led_transition(self, new_text: str, unit: str):
+    #     try:
+    #         new_img = self._render_led(new_text, unit, size=(540, 120))
+    #         old_img = self._led_img or new_img
+    #         steps = 6
+    #         for i in range(steps):
+    #             alpha = (i + 1) / steps
+    #             blended = Image.blend(old_img.convert('RGBA'), new_img.convert('RGBA'), alpha)
+    #             photo = ImageTk.PhotoImage(blended)
+    #             self._display_label.configure(image=photo)
+    #             self._display_label.image = photo
+    #             self.update_idletasks()
+    #             self.after(30)
+    #         self._led_img = new_img
+    #         if PIL_AVAILABLE:
+    #             self._led_photo = ImageTk.PhotoImage(self._led_img)
+    #             self._display_label.configure(image=self._led_photo, text='')
+    #             self._display_label.image = self._led_photo
+    #         else:
+    #             self._display_label.configure(text=new_text)
+    #         self._unit_label.configure(text=unit)
+    #     except Exception:
+    #         # fallback show text
+    #         try:
+    #             self._display_label.configure(text=new_text)
+    #             self._unit_label.configure(text=unit)
+    #         except Exception:
+    #             pass
 
     def _animate_and_call(self, func):
         # small visual flash on button press
@@ -319,25 +321,25 @@ class MeterGUI(ctk.CTk):
     # -----------------------------
     # Splash and icon
     # -----------------------------
-    def _generate_icon(self, w: int, h: int):
-        img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        draw.ellipse((4, 4, w-4, h-4), fill=(31, 111, 235, 255))
-        try:
-            f = ImageFont.truetype('DejaVuSans-Bold.ttf', 18)
-        except Exception:
-            f = ImageFont.load_default()
-        draw.text((w//6, h//6), 'XDM', font=f, fill=(255, 255, 255, 255))
-        return img
-
-    def _show_splash(self):
-        splash = tk.Toplevel(self)
-        splash.overrideredirect(True)
-        splash.geometry('360x120+{}+{}'.format(self.winfo_x()+100, self.winfo_y()+100))
-        splash.configure(bg='#222222')
-        lbl = tk.Label(splash, text='Owon XDM2041 — Initializing', font=('Helvetica', 14), bg='#222222', fg='white')
-        lbl.pack(fill='both', expand=True, padx=16, pady=16)
-        self.after(900, splash.destroy)
+    # def _generate_icon(self, w: int, h: int):
+    #     img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    #     draw = ImageDraw.Draw(img)
+    #     draw.ellipse((4, 4, w-4, h-4), fill=(31, 111, 235, 255))
+    #     try:
+    #         f = ImageFont.truetype('DejaVuSans-Bold.ttf', 18)
+    #     except Exception:
+    #         f = ImageFont.load_default()
+    #     draw.text((w//6, h//6), 'XDM', font=f, fill=(255, 255, 255, 255))
+    #     return img
+    #
+    # def _show_splash(self):
+    #     splash = tk.Toplevel(self)
+    #     splash.overrideredirect(True)
+    #     splash.geometry('360x120+{}+{}'.format(self.winfo_x()+100, self.winfo_y()+100))
+    #     splash.configure(bg='#222222')
+    #     lbl = tk.Label(splash, text='Owon XDM2041 — Initializing', font=('Helvetica', 14), bg='#222222', fg='white')
+    #     lbl.pack(fill='both', expand=True, padx=16, pady=16)
+    #     self.after(900, splash.destroy)
 
 
 def main():
