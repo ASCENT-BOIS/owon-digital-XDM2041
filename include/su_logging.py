@@ -20,6 +20,7 @@ class DeviceController:
     def check_device(self):
         """Check device connection every 5 seconds"""
         threading.Thread(target=self._check_thread, daemon=True).start()
+
         # Start countdown
         self.countdown = 5
         self.update_countdown()
@@ -28,12 +29,14 @@ class DeviceController:
         """Update the countdown display"""
         if self.countdown > 0:
             self.output.config(state="normal")
+            
             # Get current content and check if countdown already exists
             content = self.output.get("1.0", "end-1c")
             lines = content.split('\n')
             
             # Only show countdown for disconnected state
             if "DISCONNECTED" not in content:
+
                 # For connected state, just keep the message as is
                 self.output.config(state="disabled")
                 self.countdown -= 1
@@ -52,10 +55,12 @@ class DeviceController:
             
             # Re-insert with color tags if disconnected
             self.output.insert("end", "DISCONNECTED\n\n", "disconnected")
+
             # Add only the error message (not troubleshooting)
             if error_end > 0:
                 self.output.insert("end", lines[error_end] + "\n")
             self.output.insert("end", "\n")  # Add blank line after error
+
             # Add troubleshooting
             self.output.insert("end", "Troubleshooting:\n")
             self.output.insert("end", "• Check USB cable connection\n")
