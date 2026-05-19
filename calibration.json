@@ -1,0 +1,21 @@
+{
+  "calibration": {
+    "VDC": 0.0,
+    "VAC": 0.0,
+    "A": 0.0,
+    "OHM": 0.0,
+    "HZ": 0.0
+  },
+  "averaging": {
+    "enabled": false,
+    "count": 1
+  },
+  "profile": "owon_xdm2041",
+  "custom_cmds": {
+    "VDC": "MEAS1?",
+    "VAC": "MEASure:VOLTage:AC?",
+    "A": "MEASure:CURRent:DC?",
+    "OHM": "MEASure:RESistance?",
+    "HZ": "MEASure:FREQuency?"
+  }
+}
