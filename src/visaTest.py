@@ -11,7 +11,6 @@ inst.parity = pyvisa.constants.Parity.none
 inst.timeout = 3000
 inst.read_termination = '\n'
 inst.write_termination = '\n'
-inst.flow_control = pyvisa.constants.VI_ASRL_FLOW_RTS_CTS
 
 print(inst.query('*IDN?'))
 
@@ -19,5 +18,11 @@ print(inst.query('FUNC?'))
 
 inst.write('SYST:REM')
 time.sleep(0.5)  # longer delay
-inst.write('CONF:RES')
+inst.write('CONF:FRES')
 time.sleep(0.2)
+
+print(inst.query("FUNC?"))
+
+while True:
+    print(inst.query('MEAS?'))
+    time.sleep(0.5)
