@@ -6,7 +6,6 @@ import random
 
 matplotlib.use('TkAgg')
 
-from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg,
     NavigationToolbar2Tk
@@ -23,12 +22,13 @@ class ChartWindow(tk.Toplevel):
         figure_canvas = FigureCanvasTkAgg(figure, self)
         NavigationToolbar2Tk(figure_canvas, self)
 
-        axes = figure.add_subplot()
         axes.plot(x, y)
         axes.set_title('Time to Random')
         axes.set_ylabel('Random Numbers')
 
         figure_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+        tk.Label(self, text="Sampling rate: 20Hz | Rail: 3.3V").pack(pady=5)
 
 def open_chart_window(parent, textfile):
     with open(textfile) as f:
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     root = tk.Tk()
     root.title('Main App')
 
-    btn = tk.Button(root, text='Open Chart', command=lambda: open_chart_window(root))
+    btn = tk.Button(root, text='Open Chart', command=lambda: open_chart_window(root, "/Users/elijahflader/owon-digital-XDM2041/numbers_all.txt"))
     btn.pack(padx=20, pady=20)
 
     root.mainloop()
