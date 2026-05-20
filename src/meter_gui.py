@@ -13,7 +13,7 @@ try:
 except Exception:
     PIL_AVAILABLE = False
 
-from .pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter
+from .pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter, AGILENT_34401A_PROFILE
 from .data_logger import Logger
 from tkinter import filedialog
 
@@ -57,6 +57,11 @@ class MeterGUI(ctk.CTk):
         self.res_cb.grid(row=0, column=1, padx=6, pady=6, sticky='w')
         ctk.CTkButton(frm, text='Refresh', command=self._refresh, width=90).grid(row=0, column=2, padx=6)
         ctk.CTkButton(frm, text='Connect', command=self._connect, width=110).grid(row=0, column=3, padx=6)
+        # Profile selector (Auto-detect or specific device)
+        ctk.CTkLabel(frm, text='Profile:').grid(row=0, column=4, sticky='w', padx=6)
+        self.profile_cb = ctk.CTkComboBox(frm, values=['Auto-detect', 'Agilent 34401A'], width=220)
+        self.profile_cb.set('Auto-detect')
+        self.profile_cb.grid(row=0, column=5, padx=6)
 
         # Mode / Range row
         ctk.CTkLabel(frm, text='Mode:').grid(row=1, column=0, sticky='w', padx=6, pady=6)
@@ -151,7 +156,38 @@ class MeterGUI(ctk.CTk):
         except Exception as e:
             messagebox.showerror('Connect failed', str(e))
             return
+        # apply manual profile selection if requested
+        prof_choice = (self.profile_cb.get() or 'Auto-detect').strip()
+        try:
+            if prof_choice == 'Agilent 34401A':
+                # attach agilent profile to backend
+                try:
+                    backend.instrument_profile = AGILENT_34401A_PROFILE
+                    backend.profile = AGILENT_34401A_PROFILE['name']
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         self.meter = backend
+
+        # update available modes according to profile (if any)
+        try:
+            prof = getattr(self.meter, 'instrument_profile', None)
+            if prof and isinstance(prof, dict):
+                modes = list(prof.get('modes', {}).keys())
+                if modes:
+                    self.mode_cb.configure(values=modes)
+                    # ensure CAP not selected when unsupported
+                    if 'CAP' not in modes and self.mode_cb.get() == 'CAP':
+                        self.mode_cb.set(modes[0])
+                    else:
+                        self.mode_cb.set(modes[0])
+            else:
+                self.mode_cb.configure(values=list(PyVISAMultimeter().DEFAULT_MODES))
+        except Exception:
+            pass
+
         self.status_var.set(f'Connected: {sel}')
 
     def _measure(self):
