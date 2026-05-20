@@ -17,7 +17,7 @@ def test_shutdown():
     try:
         rm = pyvisa.ResourceManager('@py')
         inst = rm.open_resource('ASRL/dev/cu.usbserial-1130::INSTR')
-        
+
         inst.baud_rate = 115200
         inst.data_bits = 8
         inst.stop_bits = pyvisa.constants.StopBits.one
@@ -25,7 +25,7 @@ def test_shutdown():
         inst.timeout = 3000
         inst.read_termination = '\n'
         inst.write_termination = '\n'
-        
+
         # Test device connection
         device_id = inst.query('*IDN?')
         print(f"✓ Connected: {device_id}")
@@ -36,7 +36,7 @@ def test_shutdown():
             print("✓ Device set to REMOTE mode")
         except Exception as e:
             print(f"Warning: failed to set REMOTE mode: {e}")
-        
+
         # Test shutdown using 'q' to quit
         while True:
             choice = input("Press 'q' then Enter to shutdown and quit: ").strip().lower()

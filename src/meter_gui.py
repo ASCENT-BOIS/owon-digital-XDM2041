@@ -7,11 +7,14 @@ import csv
 import os
 from typing import Optional
 
-try:
-    from PIL import Image, ImageDraw, ImageFont, ImageTk, ImageFilter
-    PIL_AVAILABLE = True
-except Exception:
-    PIL_AVAILABLE = False
+# try:
+# from PIL import Image, ImageDraw, ImageFont, ImageTk, ImageFilter
+#     PIL_AVAILABLE = True
+# except Exception:
+#     PIL_AVAILABLE = False
+
+
+PIL_AVAILABLE = False
 
 from .pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter, AGILENT_34401A_PROFILE
 from .data_logger import Logger
