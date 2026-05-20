@@ -2,6 +2,9 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk
 import tkinter.messagebox as messagebox
+import json
+import csv
+import os
 from typing import Optional
 
 # try:
@@ -10,9 +13,15 @@ from typing import Optional
 # except Exception:
 #     PIL_AVAILABLE = False
 
+<<<<<<< HEAD
 PIL_AVAILABLE = False
 
 from pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter
+=======
+from .pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter
+from .data_logger import Logger
+from tkinter import filedialog
+>>>>>>> 8aaf95cf99f7aaaeb8de079f0ffd5497182e8663
 
 
 class MeterGUI(ctk.CTk):
@@ -38,7 +47,11 @@ class MeterGUI(ctk.CTk):
         self._led_img = None
         self._led_photo = None
 
+        # logging state
         self._streaming = False
+        self._logging_enabled = False
+        self.logger = None
+        self.log_dir = 'logs'
 
     def _build(self):
         frm = ctk.CTkFrame(self, corner_radius=8)
@@ -83,6 +96,15 @@ class MeterGUI(ctk.CTk):
         self.avg_spin.grid(row=3, column=1, padx=6)
         ctk.CTkButton(frm, text='Calibrate...', command=self._open_calib, width=140).grid(row=3, column=2, padx=6)
 
+        # Logging controls: toggle and choose directory
+        self.log_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(frm, text='Log', variable=self.log_var, command=self._toggle_logging).grid(row=3, column=3, padx=6)
+        ctk.CTkButton(frm, text='Choose Log Dir', command=self._choose_log_dir, width=140).grid(row=3, column=4, padx=6)
+        ctk.CTkButton(frm, text='Export TXT', command=self._export_txt, width=120).grid(row=3, column=5, padx=6)
+        ctk.CTkButton(frm, text='Export CSV', command=self._export_csv, width=120).grid(row=3, column=6, padx=6)
+        self.auto_export_var = ctk.BooleanVar(value=True)
+        ctk.CTkCheckBox(frm, text='Auto-export on stop', variable=self.auto_export_var).grid(row=3, column=7, padx=6)
+
         # LED display area (Pillow if available; otherwise text)
         if PIL_AVAILABLE:
             self._led_img = self._render_led('---', '', size=(540, 120))
@@ -102,10 +124,16 @@ class MeterGUI(ctk.CTk):
 
         # footer
         self.status_var = ctk.StringVar(value='Ready')
-        ctk.CTkLabel(frm, textvariable=self.status_var).grid(row=5, column=0, columnspan=4, sticky='w', padx=6, pady=6)
+        ctk.CTkLabel(frm, textvariable=self.status_var).grid(row=5, column=0, columnspan=3, sticky='w', padx=6, pady=6)
+
+        # Streaming interval control
+        ctk.CTkLabel(frm, text='Interval (s):').grid(row=5, column=3, sticky='e', padx=6)
+        self.interval_ent = ctk.CTkEntry(frm, width=100)
+        self.interval_ent.insert(0, '0.25')
+        self.interval_ent.grid(row=5, column=4, padx=6)
 
         # grid weights
-        for i in range(5):
+        for i in range(8):
             frm.grid_columnconfigure(i, weight=1)
 
     def _resources(self):
@@ -142,6 +170,11 @@ class MeterGUI(ctk.CTk):
             v, u = self.meter.measure()
             s = f"{v:.6g}"
             self._update_led_transition(s, u)
+            # append to log if enabled
+            try:
+                self._append_log(v, u, mode=self.mode_cb.get())
+            except Exception:
+                pass
             self.status_var.set('Last read: OK')
         except Exception as e:
             messagebox.showerror('Measure failed', str(e))
@@ -156,6 +189,10 @@ class MeterGUI(ctk.CTk):
             v, u = self.meter.measure_resistance()
             s = f"{v:.6g}"
             self._update_led_transition(s, u)
+            try:
+                self._append_log(v, u, mode='OHM')
+            except Exception:
+                pass
             self.status_var.set('Last read: OK')
         except Exception as e:
             messagebox.showerror('Measure failed', str(e))
@@ -170,6 +207,10 @@ class MeterGUI(ctk.CTk):
             v, u = self.meter.measure_capacitance()
             s = f"{v:.6g}"
             self._update_led_transition(s, u)
+            try:
+                self._append_log(v, u, mode='CAP')
+            except Exception:
+                pass
             self.status_var.set('Last read: OK')
         except Exception as e:
             messagebox.showerror('Measure failed', str(e))
@@ -182,7 +223,14 @@ class MeterGUI(ctk.CTk):
         if not self._streaming:
             self._streaming = True
             self.stream_btn.configure(text='Stop Stream')
-            self.meter.start_stream(self._stream_callback, interval=0.25)
+            # read interval from UI
+            try:
+                interval = float(self.interval_ent.get())
+                if interval <= 0:
+                    interval = 0.25
+            except Exception:
+                interval = 0.25
+            self.meter.start_stream(self._stream_callback, interval=interval)
             self._animate_stream_indicator(True)
             self.status_var.set('Streaming...')
         else:
@@ -191,9 +239,24 @@ class MeterGUI(ctk.CTk):
             self.meter.stop_stream()
             self._animate_stream_indicator(False)
             self.status_var.set('Ready')
+            # auto-export and show report if enabled
+            try:
+                if getattr(self, 'auto_export_var', None) and self.auto_export_var.get():
+                    # perform export silently and show report
+                    self._auto_export_and_show_report()
+            except Exception:
+                pass
 
     def _stream_callback(self, v, u):
-        self.after(0, lambda: self._update_led_transition(f"{v:.6g}", u))
+        # update UI and write log entry
+        def cb():
+            self._update_led_transition(f"{v:.6g}", u)
+            try:
+                self._append_log(v, u, mode=self.mode_cb.get())
+            except Exception:
+                pass
+
+        self.after(0, cb)
 
     def _toggle_avg(self):
         if not self.meter:
@@ -317,6 +380,159 @@ class MeterGUI(ctk.CTk):
             pulse()
         else:
             self._stream_indicator.configure(text_color='#9EA0A5')
+
+    # -----------------------------
+    # Logging helpers
+    # -----------------------------
+    def _choose_log_dir(self):
+        try:
+            d = filedialog.askdirectory(initialdir=self.log_dir or '.')
+            if d:
+                self.log_dir = d
+                self.status_var.set(f'Log dir: {self.log_dir}')
+        except Exception:
+            pass
+
+    def _toggle_logging(self):
+        enabled = bool(self.log_var.get())
+        if enabled and not self.logger:
+            try:
+                self.logger = Logger(log_dir=self.log_dir)
+                self._logging_enabled = True
+                self.status_var.set(f'Logging to: {self.logger.current_path}')
+            except Exception as e:
+                messagebox.showerror('Logger error', str(e))
+                self.log_var.set(False)
+                self._logging_enabled = False
+        else:
+            self._logging_enabled = False
+            self.log_var.set(False)
+            self.status_var.set('Logging stopped')
+
+    def _append_log(self, value, unit, mode=None, raw_response=None):
+        if not self._logging_enabled or not self.logger:
+            return
+        try:
+            rec = self.logger.make_record(value=value, unit=unit, instrument_id=(self.meter.idn if getattr(self.meter, 'idn', None) else None), mode=mode, range=self.range_ent.get(), averaging_count=(int(self.avg_spin.get()) if self.avg_var.get() else None), calibration_offsets=(getattr(self.meter, 'calibration', None) if self.meter else None), raw_response=raw_response)
+            self.logger.append(rec)
+        except Exception:
+            pass
+
+    def _select_source_file(self):
+        # prefer active logger file, otherwise ask user
+        path = None
+        if self.logger and getattr(self.logger, 'current_path', None):
+            path = self.logger.current_path
+            if os.path.exists(path):
+                return path
+        # ask user to pick a JSONL file
+        p = filedialog.askopenfilename(title='Select measurements JSONL file', filetypes=[('JSONL','*.jsonl'), ('All','*.*')], initialdir=(self.log_dir or '.'))
+        if p:
+            return p
+        return None
+
+    def _export_txt(self):
+        src = self._select_source_file()
+        if not src:
+            return
+        dest = filedialog.asksaveasfilename(defaultextension='.txt', filetypes=[('Text','*.txt')], initialfile='res_cap_with_time.txt')
+        if not dest:
+            return
+        try:
+            with open(src, 'r', encoding='utf-8') as fh, open(dest, 'w', encoding='utf-8') as oh:
+                for line in fh:
+                    try:
+                        r = json.loads(line)
+                    except Exception:
+                        continue
+                    if r.get('mode') in ('OHM', 'CAP'):
+                        ts = r.get('timestamp', '')
+                        oh.write(f"{ts}\t{r.get('value')}\t{r.get('unit','')}\n")
+            messagebox.showinfo('Export complete', f'Wrote {dest}')
+        except Exception as e:
+            messagebox.showerror('Export failed', str(e))
+
+    def _export_csv(self):
+        src = self._select_source_file()
+        if not src:
+            return
+        dest = filedialog.asksaveasfilename(defaultextension='.csv', filetypes=[('CSV','*.csv')], initialfile='measurements_export.csv')
+        if not dest:
+            return
+        try:
+            with open(src, 'r', encoding='utf-8') as fh, open(dest, 'w', newline='', encoding='utf-8') as oh:
+                writer = csv.writer(oh)
+                writer.writerow(['timestamp', 'measurement_id', 'instrument_id', 'mode', 'value', 'unit'])
+                for line in fh:
+                    try:
+                        r = json.loads(line)
+                    except Exception:
+                        continue
+                    writer.writerow([r.get('timestamp',''), r.get('measurement_id',''), r.get('instrument_id',''), r.get('mode',''), r.get('value',''), r.get('unit','')])
+            messagebox.showinfo('Export complete', f'Wrote {dest}')
+        except Exception as e:
+            messagebox.showerror('Export failed', str(e))
+
+    def _auto_export_and_show_report(self):
+        # export current logger file to CSV in log_dir and show report window
+        src = None
+        if self.logger and getattr(self.logger, 'current_path', None):
+            src = self.logger.current_path
+        if not src or not os.path.exists(src):
+            return
+        base = os.path.splitext(os.path.basename(src))[0]
+        dest = os.path.join(self.log_dir, f"{base}_auto_export.csv")
+        try:
+            # write CSV
+            with open(src, 'r', encoding='utf-8') as fh, open(dest, 'w', newline='', encoding='utf-8') as oh:
+                writer = csv.writer(oh)
+                writer.writerow(['timestamp', 'measurement_id', 'instrument_id', 'mode', 'value', 'unit'])
+                for line in fh:
+                    try:
+                        r = json.loads(line)
+                    except Exception:
+                        continue
+                    writer.writerow([r.get('timestamp',''), r.get('measurement_id',''), r.get('instrument_id',''), r.get('mode',''), r.get('value',''), r.get('unit','')])
+            # show report window
+            self._show_report_window(dest)
+        except Exception:
+            pass
+
+    def _show_report_window(self, path):
+        # display CSV or JSONL file contents in a table
+        win = tk.Toplevel(self)
+        win.title('Export Report')
+        frame = ttk.Frame(win)
+        frame.pack(fill='both', expand=True)
+        cols = ('timestamp', 'measurement_id', 'instrument_id', 'mode', 'value', 'unit')
+        tree = ttk.Treeview(frame, columns=cols, show='headings')
+        for c in cols:
+            tree.heading(c, text=c)
+            tree.column(c, width=120, anchor='center')
+        vsb = ttk.Scrollbar(frame, orient='vertical', command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+        tree.grid(row=0, column=0, sticky='nsew')
+        vsb.grid(row=0, column=1, sticky='ns')
+        frame.grid_rowconfigure(0, weight=1)
+        frame.grid_columnconfigure(0, weight=1)
+
+        # load rows
+        try:
+            if path.lower().endswith('.csv'):
+                with open(path, 'r', encoding='utf-8') as fh:
+                    rdr = csv.DictReader(fh)
+                    for r in rdr:
+                        tree.insert('', 'end', values=(r.get('timestamp',''), r.get('measurement_id',''), r.get('instrument_id',''), r.get('mode',''), r.get('value',''), r.get('unit','')))
+            else:
+                with open(path, 'r', encoding='utf-8') as fh:
+                    for line in fh:
+                        try:
+                            r = json.loads(line)
+                        except Exception:
+                            continue
+                        tree.insert('', 'end', values=(r.get('timestamp',''), r.get('measurement_id',''), r.get('instrument_id',''), r.get('mode',''), r.get('value',''), r.get('unit','')))
+        except Exception:
+            pass
 
     # -----------------------------
     # Splash and icon
