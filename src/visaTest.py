@@ -1,5 +1,6 @@
 import pyvisa
 import time
+import decimal
 
 rm = pyvisa.ResourceManager('@py')
 inst = rm.open_resource('ASRL/dev/cu.usbserial-1130::INSTR')
@@ -18,14 +19,16 @@ print(inst.query('FUNC?'))
 
 inst.write('SYST:REM')
 time.sleep(0.5)  # longer delay
-inst.write('CONF:FRES')
+inst.write('CONF:CAP')
 time.sleep(0.2)
 
 print(inst.query("FUNC?"))
 
 while True:
-    print(inst.query('MEAS?'))
-    time.sleep(0.5)
+    raw = inst.query('MEAS?').strip()
+    value = float(raw)
+    print(f"{value:.13f} μF")
+    time.sleep(0.1)
 
 def get_data(inst):
     return inst.query("MEAS?")
