@@ -158,7 +158,7 @@ class DeviceController:
                 from pathlib import Path
 
                 project_root = Path(__file__).resolve().parent.parent
-                cmd = [sys.executable, "-m", "src.meter_gui"]
+                cmd = [sys.executable, "-m", "src"]
 
                 def _start_proc():
                     try:

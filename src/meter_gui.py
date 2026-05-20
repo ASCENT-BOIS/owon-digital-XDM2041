@@ -13,15 +13,12 @@ from typing import Optional
 # except Exception:
 #     PIL_AVAILABLE = False
 
-<<<<<<< HEAD
+
 PIL_AVAILABLE = False
 
-from pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter
-=======
 from .pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter
 from .data_logger import Logger
 from tkinter import filedialog
->>>>>>> 8aaf95cf99f7aaaeb8de079f0ffd5497182e8663
 
 
 class MeterGUI(ctk.CTk):

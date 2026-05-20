@@ -4,7 +4,7 @@ import time
 import random
 from typing import List, Optional, Tuple
 
-from multi_func import Multimeter
+from .multi_func import Multimeter
 
 
 class SimulatorMultimeter(Multimeter):
