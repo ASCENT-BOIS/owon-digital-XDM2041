@@ -1,0 +1,7 @@
+customtkinter
+pyvisa
+pyvisa-py
+pyusb
+pillow
+matplotlib
+ttkbootstrap
