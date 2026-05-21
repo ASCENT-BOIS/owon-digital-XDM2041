@@ -1,6 +1,7 @@
+import threading
 import tkinter as tk
 from tkinter import ttk
-import threading
+
 
 class DeviceController:
     def __init__(self, root, output_text):
@@ -42,7 +43,6 @@ class DeviceController:
         if not self.countdown_running:
             self.update_countdown()
 
-
     def _render_display(self):
         """Render the output display based on current state and countdown."""
         try:
@@ -62,8 +62,7 @@ class DeviceController:
 
             # Countdown line
             self.output.insert(
-                "end",
-                f"Retrying in 5 Sec. [ {self.countdown} s. / 5 s. ]"
+                "end", f"Retrying in 5 Sec. [ {self.countdown} s. / 5 s. ]"
             )
 
             self.output.config(state="disabled")
@@ -94,45 +93,33 @@ class DeviceController:
         try:
             import pyvisa
 
-            rm = pyvisa.ResourceManager('@py')
+            rm = pyvisa.ResourceManager("@py")
 
-            self.inst = rm.open_resource(
-                'ASRL/dev/cu.usbserial-1130::INSTR'
-            )
+            self.inst = rm.open_resource("ASRL/dev/cu.usbserial-1130::INSTR")
 
             self.inst.baud_rate = 115200
             self.inst.data_bits = 8
             self.inst.stop_bits = pyvisa.constants.StopBits.one
             self.inst.parity = pyvisa.constants.Parity.none
             self.inst.timeout = 3000
-            self.inst.read_termination = '\n'
-            self.inst.write_termination = '\n'
+            self.inst.read_termination = "\n"
+            self.inst.write_termination = "\n"
 
             # Query device info IF DEVICE CONNECTED
-            device_id = self.inst.query('*IDN?')
+            device_id = self.inst.query("*IDN?")
 
             # Format device info with descriptive labels
-            parts = device_id.strip().split(',')
+            parts = device_id.strip().split(",")
 
-            labels = [
-                "Brand",
-                "Model",
-                "Serial #",
-                "Version"
-            ]
+            labels = ["Brand", "Model", "Serial #", "Version"]
 
             formatted_lines = ["Device Info:"]
 
             for i, part in enumerate(parts):
-
                 if i < len(labels):
-
-                    formatted_lines.append(
-                        f"• {labels[i]}: {part}"
-                    )
+                    formatted_lines.append(f"• {labels[i]}: {part}")
 
                 else:
-
                     formatted_lines.append(f"• {part}")
 
             formatted_id = "\n".join(formatted_lines)
@@ -158,7 +145,7 @@ class DeviceController:
                 from pathlib import Path
 
                 project_root = Path(__file__).resolve().parent.parent
-                cmd = [sys.executable, "-m", "src"]
+                cmd = [sys.executable, "-m", "src.meter_gui"]
 
                 def _start_proc():
                     try:
@@ -175,7 +162,7 @@ class DeviceController:
                         pass
 
                 need_start = False
-                if not getattr(self, 'gui_proc', None):
+                if not getattr(self, "gui_proc", None):
                     need_start = True
                 else:
                     try:
@@ -198,14 +185,13 @@ class DeviceController:
                 pass
 
         except Exception as e:
-
             # Save disconnected state
             self.connected = False
             self.device_message = ""
             self.error_message = str(e)
             # If we have a running GUI subprocess, terminate it
             try:
-                proc = getattr(self, 'gui_proc', None)
+                proc = getattr(self, "gui_proc", None)
                 if proc is not None:
                     try:
                         if proc.poll() is None:
@@ -234,25 +220,12 @@ def create_window():
 
     # Output terminal with larger text
     output_text = tk.Text(
-        root,
-        height=20,
-        width=30,
-        bg="black",
-        fg="white",
-        font=("Courier", 14)
+        root, height=20, width=30, bg="black", fg="white", font=("Courier", 14)
     )
 
-    output_text.pack(
-        padx=10,
-        pady=10,
-        fill="both",
-        expand=False
-    )
+    output_text.pack(padx=10, pady=10, fill="both", expand=False)
 
-    output_text.insert(
-        "1.0",
-        "Starting device check..."
-    )
+    output_text.insert("1.0", "Starting device check...")
 
     # Make the terminal non-selectable / non-focusable
     output_text.configure(exportselection=False, takefocus=0, cursor="arrow")
@@ -260,13 +233,21 @@ def create_window():
     def _ignore_event(event):
         return "break"
 
-    for seq in ("<Button-1>", "<B1-Motion>", "<Double-Button-1>", "<Triple-Button-1>", "<ButtonRelease-1>", "<Control-c>", "<Control-C>"):
+    for seq in (
+        "<Button-1>",
+        "<B1-Motion>",
+        "<Double-Button-1>",
+        "<Triple-Button-1>",
+        "<ButtonRelease-1>",
+        "<Control-c>",
+        "<Control-C>",
+    ):
         output_text.bind(seq, _ignore_event)
 
     return root, output_text
 
 
-if __name__ == "__main__":
+def start():
     root, output = create_window()
-    controller = DeviceController(root, output)
+    DeviceController(root, output)
     root.mainloop()
