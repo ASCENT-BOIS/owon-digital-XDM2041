@@ -6,6 +6,32 @@ import json
 import csv
 import os
 from typing import Optional
+from collections import deque
+
+
+try:
+    from PIL import Image, ImageDraw, ImageFont, ImageTk, ImageFilter
+    PIL_AVAILABLE = True
+except Exception:
+    PIL_AVAILABLE = False
+
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    MATPLOTLIB_AVAILABLE = True
+    plt.style.use('dark_background')
+except Exception:
+    MATPLOTLIB_AVAILABLE = False
+
+try:
+    import ttkbootstrap as tb
+    from ttkbootstrap import Style as TBStyle
+    TTB_AVAILABLE = True
+except Exception:
+    TTB_AVAILABLE = False
 
 # try:
 # from PIL import Image, ImageDraw, ImageFont, ImageTk, ImageFilter
@@ -14,8 +40,6 @@ from typing import Optional
 #     PIL_AVAILABLE = False
 
 
-PIL_AVAILABLE = False
-
 from .pyvisa_backend import PyVISAMultimeter, SimulatorMultimeter, AGILENT_34401A_PROFILE
 from .data_logger import Logger
 from tkinter import filedialog
@@ -23,13 +47,34 @@ from tkinter import filedialog
 
 class MeterGUI(ctk.CTk):
     def __init__(self):
-        ctk.set_appearance_mode('System')
+        ctk.set_appearance_mode('Dark')
         ctk.set_default_color_theme('dark-blue')
         super().__init__()
         self.title('Owon XDM2041 - Controller')
-        self.geometry('820x420')
+        self.geometry('920x520')
 
         self.meter: Optional[PyVISAMultimeter] = None
+
+        # UI state variables (must exist before building widgets)
+        self.avg_var = tk.BooleanVar(value=False)
+        self.log_var = tk.BooleanVar(value=False)
+
+        # define fonts and colors for a refined look
+        self._font_large = ctk.CTkFont(size=56, weight='bold')
+        self._font_med = ctk.CTkFont(size=18)
+        self._font_sm = ctk.CTkFont(size=12)
+        self._accent_color = '#00C851'
+
+        # apply ttkbootstrap theme to ttk widgets if available
+        if TTB_AVAILABLE:
+            try:
+                self._tb_style = TBStyle(theme='darkly')
+            except Exception:
+                pass
+
+        # mini-plot buffer (must exist before building widgets)
+        self._plot_samples = deque(maxlen=120)
+        self._plot_max_samples = 120
 
         # build UI
         self._build()
@@ -51,105 +96,134 @@ class MeterGUI(ctk.CTk):
         self.log_dir = 'logs'
 
     def _build(self):
-        frm = ctk.CTkFrame(self, corner_radius=8)
-        frm.pack(fill='both', expand=True, padx=12, pady=12)
+        # two-column polished layout
+        frm = ctk.CTkFrame(self, corner_radius=12)
+        frm.pack(fill='both', expand=True, padx=14, pady=14)
 
-        # Top row: resources and connect
-        ctk.CTkLabel(frm, text='Resource:').grid(row=0, column=0, sticky='w', padx=6, pady=6)
-        self.res_cb = ctk.CTkComboBox(frm, values=self._resources(), width=420)
-        self.res_cb.grid(row=0, column=1, padx=6, pady=6, sticky='w')
-        ctk.CTkButton(frm, text='Refresh', command=self._refresh, width=90).grid(row=0, column=2, padx=6)
-        ctk.CTkButton(frm, text='Connect', command=self._connect, width=110).grid(row=0, column=3, padx=6)
-        # Profile selector (Auto-detect or specific device)
-        ctk.CTkLabel(frm, text='Profile:').grid(row=0, column=4, sticky='w', padx=6)
-        self.profile_cb = ctk.CTkComboBox(frm, values=['Auto-detect', 'Agilent 34401A'], width=220)
+        # left: controls
+        left = ctk.CTkFrame(frm, width=360, corner_radius=12)
+        left.grid(row=0, column=0, sticky='nsw', padx=(6,12), pady=6)
+        # right: display
+        right = ctk.CTkFrame(frm, corner_radius=12)
+        right.grid(row=0, column=1, sticky='nsew', padx=(0,6), pady=6)
+        frm.grid_columnconfigure(1, weight=1)
+
+        # Controls (left)
+        ctk.CTkLabel(left, text='Resource', anchor='w', font=self._font_sm).grid(row=0, column=0, sticky='w', padx=10, pady=(10,4))
+        self.res_cb = ctk.CTkComboBox(left, values=self._resources(), width=300)
+        self.res_cb.grid(row=1, column=0, padx=10, pady=4, sticky='w')
+        ctk.CTkButton(left, text='Refresh', command=self._refresh, width=120).grid(row=1, column=1, padx=6)
+
+        # profile selector and connect
+        ctk.CTkLabel(left, text='Profile', anchor='w', font=self._font_sm).grid(row=2, column=0, sticky='w', padx=10, pady=(8,2))
+        self.profile_cb = ctk.CTkComboBox(left, values=['Auto-detect', 'Agilent 34401A'], width=200)
         self.profile_cb.set('Auto-detect')
-        self.profile_cb.grid(row=0, column=5, padx=6)
+        self.profile_cb.grid(row=3, column=0, padx=10, pady=4, sticky='w')
+        ctk.CTkButton(left, text='Connect', command=self._connect, width=120, fg_color=self._accent_color, hover_color='#00e066', font=self._font_sm).grid(row=3, column=1, padx=6)
 
-        # Mode / Range row
-        ctk.CTkLabel(frm, text='Mode:').grid(row=1, column=0, sticky='w', padx=6, pady=6)
-        self.mode_cb = ctk.CTkComboBox(frm, values=list(PyVISAMultimeter().DEFAULT_MODES), width=220)
+        # Mode and range
+        ctk.CTkLabel(left, text='Mode / Range', anchor='w', font=self._font_sm).grid(row=4, column=0, sticky='w', padx=10, pady=(10,2))
+        self.mode_cb = ctk.CTkComboBox(left, values=list(PyVISAMultimeter().DEFAULT_MODES), width=140)
         self.mode_cb.set('VDC')
-        self.mode_cb.grid(row=1, column=1, sticky='w', padx=6)
-
-        ctk.CTkLabel(frm, text='Range:').grid(row=1, column=2, sticky='w', padx=6)
-        self.range_ent = ctk.CTkEntry(frm, width=140)
+        self.mode_cb.grid(row=5, column=0, padx=10, pady=4, sticky='w')
+        self.range_ent = ctk.CTkEntry(left, width=120)
         self.range_ent.insert(0, 'AUTO')
-        self.range_ent.grid(row=1, column=3, padx=6)
+        self.range_ent.grid(row=5, column=1, padx=6)
 
-        # Controls row
-        self._measure_btn = ctk.CTkButton(frm, text='Measure', width=140, command=lambda: self._animate_and_call(self._measure))
-        self._measure_btn.grid(row=2, column=0, padx=6, pady=10)
+        # Action buttons
+        btn_frame = ctk.CTkFrame(left, fg_color='transparent')
+        btn_frame.grid(row=6, column=0, columnspan=2, padx=10, pady=(12,6), sticky='w')
+        self._measure_btn = ctk.CTkButton(btn_frame, text='Measure', width=120, command=lambda: self._animate_and_call(self._measure), font=self._font_sm, fg_color='#2E8BFF', hover_color='#4EA3FF')
+        self._measure_btn.grid(row=0, column=0, padx=6, pady=4)
+        self._measure_r_btn = ctk.CTkButton(btn_frame, text='Measure Ω', width=140, command=lambda: self._animate_and_call(self._measure_resistance), font=self._font_sm)
+        self._measure_r_btn.grid(row=0, column=1, padx=6)
+        self._measure_c_btn = ctk.CTkButton(btn_frame, text='Measure F', width=140, command=lambda: self._animate_and_call(self._measure_capacitance), font=self._font_sm)
+        self._measure_c_btn.grid(row=0, column=2, padx=6)
+        # start with CAP disabled until profile confirms support
+        try:
+            self._measure_c_btn.configure(state='disabled')
+        except Exception:
+            pass
 
-        self._measure_r_btn = ctk.CTkButton(frm, text='Measure Resistance', width=220, command=lambda: self._animate_and_call(self._measure_resistance))
-        self._measure_r_btn.grid(row=2, column=1, padx=6)
+        # Stream and interval
+        self.stream_btn = ctk.CTkButton(left, text='Start Stream', width=180, command=lambda: self._animate_and_call(self._toggle_stream), font=self._font_sm, fg_color='#FF6B00', hover_color='#FF8633')
+        self.stream_btn.grid(row=7, column=0, columnspan=2, padx=10, pady=(8,6))
+        ctk.CTkLabel(left, text='Interval (s):').grid(row=8, column=0, sticky='e', padx=6)
+        self.interval_ent = ctk.CTkEntry(left, width=80)
+        self.interval_ent.insert(0, '0.25')
+        self.interval_ent.grid(row=8, column=1, sticky='w')
 
-        self._measure_c_btn = ctk.CTkButton(frm, text='Measure Capacitance', width=220, command=lambda: self._animate_and_call(self._measure_capacitance))
-        self._measure_c_btn.grid(row=2, column=2, padx=6)
-
-        self.stream_btn = ctk.CTkButton(frm, text='Start Stream', width=140, command=lambda: self._animate_and_call(self._toggle_stream))
-        self.stream_btn.grid(row=2, column=3, padx=6)
-
-        # Averaging / Calibrate
-        self.avg_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(frm, text='Avg', variable=self.avg_var, command=self._toggle_avg).grid(row=3, column=0, padx=6, pady=6)
-        self.avg_spin = ctk.CTkEntry(frm, width=80)
+        # Averaging / Calibrate / Logging / Export
+        ctk.CTkCheckBox(left, text='Avg', variable=self.avg_var, command=self._toggle_avg).grid(row=9, column=0, padx=10, pady=6, sticky='w')
+        self.avg_spin = ctk.CTkEntry(left, width=80)
         self.avg_spin.insert(0, '1')
-        self.avg_spin.grid(row=3, column=1, padx=6)
-        ctk.CTkButton(frm, text='Calibrate...', command=self._open_calib, width=140).grid(row=3, column=2, padx=6)
-
-        # Logging controls: toggle and choose directory
-        self.log_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(frm, text='Log', variable=self.log_var, command=self._toggle_logging).grid(row=3, column=3, padx=6)
-        ctk.CTkButton(frm, text='Choose Log Dir', command=self._choose_log_dir, width=140).grid(row=3, column=4, padx=6)
-        ctk.CTkButton(frm, text='Export TXT', command=self._export_txt, width=120).grid(row=3, column=5, padx=6)
-        ctk.CTkButton(frm, text='Export CSV', command=self._export_csv, width=120).grid(row=3, column=6, padx=6)
+        self.avg_spin.grid(row=9, column=1, padx=6, sticky='w')
+        ctk.CTkButton(left, text='Calibrate...', command=self._open_calib, width=120).grid(row=10, column=0, padx=10, pady=6)
+        ctk.CTkCheckBox(left, text='Log', variable=self.log_var, command=self._toggle_logging).grid(row=10, column=1, padx=6, pady=6, sticky='w')
+        ctk.CTkButton(left, text='Choose Log Dir', command=self._choose_log_dir, width=160).grid(row=11, column=0, padx=10, pady=6)
+        exp_frame = ctk.CTkFrame(left, fg_color='transparent')
+        exp_frame.grid(row=11, column=1, padx=6, pady=6)    
+        ctk.CTkButton(exp_frame, text='Export TXT', command=self._export_txt, width=110).grid(row=0, column=0, padx=6)
+        ctk.CTkButton(exp_frame, text='Export CSV', command=self._export_csv, width=110).grid(row=0, column=1, padx=6)
         self.auto_export_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(frm, text='Auto-export on stop', variable=self.auto_export_var).grid(row=3, column=7, padx=6)
+        ctk.CTkCheckBox(left, text='Auto-export on stop', variable=self.auto_export_var).grid(row=12, column=0, columnspan=2, padx=10, pady=6, sticky='w')
 
-        # LED display area (Pillow if available; otherwise text)
+        # status
+        self.status_var = ctk.StringVar(value='Ready')
+        ctk.CTkLabel(left, textvariable=self.status_var, anchor='w').grid(row=13, column=0, columnspan=2, padx=10, pady=10, sticky='w')
+
+        # Display (right)
         if PIL_AVAILABLE:
-            self._led_img = self._render_led('---', '', size=(540, 120))
+            self._led_img = self._render_led('---', '', size=(640, 160))
             self._led_photo = ImageTk.PhotoImage(self._led_img)
-            self._display_label = ctk.CTkLabel(frm, image=self._led_photo, text='')
+            self._display_label = ctk.CTkLabel(right, image=self._led_photo, text='')
         else:
             self._led_img = None
             self._led_photo = None
-            self._display_label = ctk.CTkLabel(frm, text='---', font=('Helvetica', 36))
-        self._display_label.grid(row=4, column=0, columnspan=3, padx=6, pady=12)
-        self._unit_label = ctk.CTkLabel(frm, text='')
-        self._unit_label.grid(row=4, column=3, padx=6)
+            self._display_label = ctk.CTkLabel(right, text='---', font=self._font_large, text_color='#E6F5FF')
+        self._display_label.pack(fill='both', expand=False, padx=12, pady=18)
+        self._unit_label = ctk.CTkLabel(right, text='', font=self._font_med, text_color='#CFEFFF')
+        self._unit_label.pack(padx=12)
 
-        # stream indicator
-        self._stream_indicator = ctk.CTkLabel(frm, text='●', text_color='#9EA0A5')
-        self._stream_indicator.grid(row=0, column=4, padx=(8,0))
+        # mini-plot (Matplotlib if available, otherwise fallback Canvas)
+        if MATPLOTLIB_AVAILABLE:
+            self._fig = Figure(figsize=(6, 1.2), dpi=100, facecolor='#0E1620')
+            self._ax = self._fig.add_subplot(111)
+            self._ax.set_facecolor('#0E1620')
+            self._ax.tick_params(colors='#888')
+            self._ax.get_xaxis().set_visible(False)
+            self._ax.get_yaxis().set_visible(False)
+            self._ax.set_xlim(0, self._plot_max_samples)
+            self._line, = self._ax.plot([], [], color=self._accent_color, linewidth=2)
+            self._canvas_fig = FigureCanvasTkAgg(self._fig, master=right)
+            self._canvas_fig.get_tk_widget().pack(fill='x', padx=12, pady=(6,12))
+        else:
+            self._plot_canvas = tk.Canvas(right, height=80, bg='#0E1620', highlightthickness=0)
+            self._plot_canvas.pack(fill='x', padx=12, pady=(6,12))
 
-        # footer
-        self.status_var = ctk.StringVar(value='Ready')
-        ctk.CTkLabel(frm, textvariable=self.status_var).grid(row=5, column=0, columnspan=3, sticky='w', padx=6, pady=6)
-
-        # Streaming interval control
-        ctk.CTkLabel(frm, text='Interval (s):').grid(row=5, column=3, sticky='e', padx=6)
-        self.interval_ent = ctk.CTkEntry(frm, width=100)
-        self.interval_ent.insert(0, '0.25')
-        self.interval_ent.grid(row=5, column=4, padx=6)
-
-        # grid weights
-        for i in range(8):
-            frm.grid_columnconfigure(i, weight=1)
-
-    def _resources(self):
-        try:
-            vals = PyVISAMultimeter.list_resources()
-            return vals or ['SIMULATE']
-        except Exception:
-            return ['SIMULATE']
-
+        # stream indicator and mini-stats
+        bottom = ctk.CTkFrame(right, fg_color='transparent')
+        bottom.pack(fill='x', padx=12, pady=6)
+        self._stream_indicator = ctk.CTkLabel(bottom, text='●', text_color='#9EA0A5')
+        self._stream_indicator.pack(side='left', padx=(0,8))
+        self._last_read_var = ctk.StringVar(value='Last: ---')
+        ctk.CTkLabel(bottom, textvariable=self._last_read_var).pack(side='left')
     def _refresh(self):
         vals = self._resources()
         self.res_cb.configure(values=vals)
         if vals:
             self.res_cb.set(vals[0])
+
+    def _resources(self):
+        """Return a list of available VISA resources, preferring SIMULATE."""
+        try:
+            vals = list(PyVISAMultimeter.list_resources() or [])
+        except Exception:
+            vals = []
+        # ensure SIMULATE is always available as a first choice
+        if 'SIMULATE' not in vals:
+            vals.insert(0, 'SIMULATE')
+        return vals
 
     def _connect(self):
         sel = (self.res_cb.get() or 'SIMULATE').strip()
@@ -186,8 +260,23 @@ class MeterGUI(ctk.CTk):
                         self.mode_cb.set(modes[0])
                     else:
                         self.mode_cb.set(modes[0])
+                    # enable/disable capacitance button based on modes
+                    try:
+                        if 'CAP' in modes:
+                            self._measure_c_btn.configure(state='normal')
+                        else:
+                            self._measure_c_btn.configure(state='disabled')
+                    except Exception:
+                        pass
             else:
                 self.mode_cb.configure(values=list(PyVISAMultimeter().DEFAULT_MODES))
+                try:
+                    if 'CAP' in list(PyVISAMultimeter().DEFAULT_MODES):
+                        self._measure_c_btn.configure(state='normal')
+                    else:
+                        self._measure_c_btn.configure(state='disabled')
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -289,7 +378,83 @@ class MeterGUI(ctk.CTk):
             except Exception:
                 pass
 
+            # update mini-plot buffer and redraw
+            try:
+                try:
+                    fv = float(v)
+                except Exception:
+                    fv = None
+                if fv is not None:
+                    self._plot_samples.append(fv)
+                    self._redraw_mini_plot()
+            except Exception:
+                pass
+
         self.after(0, cb)
+
+    def _redraw_mini_plot(self):
+        try:
+            samples = list(self._plot_samples)
+            if not samples:
+                # clear plot
+                if MATPLOTLIB_AVAILABLE and hasattr(self, '_line'):
+                    self._line.set_data([], [])
+                    self._canvas_fig.draw_idle()
+                return
+
+            mn = min(samples)
+            mx = max(samples)
+            if mx == mn:
+                mx = mn + 1.0
+            pad = (mx - mn) * 0.08
+            mn -= pad
+            mx += pad
+
+            if MATPLOTLIB_AVAILABLE and hasattr(self, '_ax'):
+                x = list(range(len(samples)))
+                # update line
+                self._line.set_data(x, samples)
+                # clear and draw fill
+                try:
+                    self._ax.collections.clear()
+                except Exception:
+                    pass
+                self._ax.fill_between(x, samples, [mn] * len(x), color='#003366', alpha=0.25)
+                # update limits
+                self._ax.set_xlim(0, max(self._plot_max_samples, len(samples)))
+                self._ax.set_ylim(mn, mx)
+                self._canvas_fig.draw_idle()
+                return
+
+            # fallback canvas drawing
+            c = getattr(self, '_plot_canvas', None)
+            if not c:
+                return
+            w = c.winfo_width() or c.winfo_reqwidth() or 400
+            h = c.winfo_height() or 80
+            c.delete('all')
+            n = len(samples)
+            if n < 2:
+                return
+            pts = []
+            rng = mx - mn
+            for i, s in enumerate(samples):
+                x = int(i * (w / max(self._plot_max_samples - 1, 1)))
+                y = int(h - ((s - mn) / rng) * h)
+                pts.append((x, y))
+            coords = []
+            for (x, y) in pts:
+                coords.extend([x, y])
+            coords = [0, h] + coords + [w, h]
+            c.create_polygon(coords, fill='#003366', outline='')
+            for i in range(len(pts) - 1):
+                x1, y1 = pts[i]
+                x2, y2 = pts[i + 1]
+                c.create_line(x1, y1, x2, y2, fill='#00C851', width=2)
+            lx, ly = pts[-1]
+            c.create_oval(lx - 3, ly - 3, lx + 3, ly + 3, fill='#00C851', outline='')
+        except Exception:
+            pass
 
     def _toggle_avg(self):
         if not self.meter:
@@ -346,7 +511,19 @@ class MeterGUI(ctk.CTk):
             font = ImageFont.load_default()
 
         txt = f"{text} {unit}" if unit else text
-        tw, th = draw.textsize(txt, font=font)
+        try:
+            tw, th = draw.textsize(txt, font=font)
+        except Exception:
+            try:
+                # Pillow newer versions have textbbox
+                bbox = draw.textbbox((0, 0), txt, font=font)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+            except Exception:
+                try:
+                    tw, th = font.getsize(txt)
+                except Exception:
+                    tw, th = (len(txt) * 10, 24)
         x = 12
         y = (h - th) // 2
 
