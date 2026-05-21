@@ -7,6 +7,38 @@ from typing import List, Optional, Tuple
 from .multi_func import Multimeter
 
 
+# Profile for Agilent/Keysight 34401A
+AGILENT_34401A_PROFILE = {
+    'name': 'agilent_34401a',
+    'id_contains': ['34401A', '34401'],
+    'modes': {
+        'VDC': {
+            'conf': 'CONF:VOLT:DC {range}',
+            'measure': 'MEAS:VOLT:DC?'
+        },
+        'VAC': {
+            'conf': 'CONF:VOLT:AC {range}',
+            'measure': 'MEAS:VOLT:AC?'
+        },
+        'A': {
+            'conf': 'CONF:CURR:DC {range}',
+            'measure': 'MEAS:CURR:DC?'
+        },
+        'OHM': {
+            'conf': 'CONF:RES {range}',
+            'measure': 'MEAS:RES?'
+        },
+        'HZ': {
+            'measure': 'MEAS:FREQuency?'
+        }
+    },
+    'supports_capacitance': False,
+    'units': {
+        'VDC': 'V', 'VAC': 'V', 'A': 'A', 'OHM': '\u03A9', 'HZ': 'Hz'
+    }
+}
+
+
 class SimulatorMultimeter(Multimeter):
     def __init__(self) -> None:
         super().__init__()
@@ -111,6 +143,21 @@ class PyVISAMultimeter(Multimeter):
         self.connected = True
         self.resource = resource
 
+        # try to identify and select a device profile (e.g., Agilent 34401A)
+        try:
+            idn = self.query('*IDN?')
+            self.idn = idn
+            idn_upper = (idn or '').upper()
+            # simple detection for 34401A
+            for token in AGILENT_34401A_PROFILE['id_contains']:
+                if token.upper() in idn_upper:
+                    # attach profile and set profile name
+                    self.instrument_profile = AGILENT_34401A_PROFILE
+                    self.profile = AGILENT_34401A_PROFILE['name']
+                    break
+        except Exception:
+            pass
+
     def disconnect(self) -> None:
         try:
             if self._inst:
@@ -152,6 +199,33 @@ class PyVISAMultimeter(Multimeter):
                 # default MEAS1?
                 resp = self.query('MEAS1?')
                 return float(self.parse_numeric_response(resp)), 'V'
+
+        # If a vendor profile is attached, use its commands
+        prof = getattr(self, 'instrument_profile', None)
+        if prof:
+            mode_entry = prof.get('modes', {}).get(self.mode)
+            if mode_entry:
+                # optional configuration command
+                conf = mode_entry.get('conf')
+                if conf:
+                    try:
+                        if '{' in conf:
+                            rng = 'AUTO' if (self.range is None or str(self.range).upper() == 'AUTO') else str(self.range)
+                            # support both {range} and {} styles
+                            if '{range}' in conf:
+                                self.write(conf.format(range=rng))
+                            else:
+                                self.write(conf.format(rng))
+                        else:
+                            self.write(conf)
+                    except Exception:
+                        pass
+                measure_cmd = mode_entry.get('measure')
+                if measure_cmd:
+                    resp = self.query(measure_cmd)
+                    val = float(self.parse_numeric_response(resp))
+                    unit = prof.get('units', {}).get(self.mode, '')
+                    return val, unit
 
         # fallback mapping
         cmd_map = {
