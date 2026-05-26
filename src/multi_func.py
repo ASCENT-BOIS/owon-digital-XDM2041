@@ -8,6 +8,7 @@ should subclass `Multimeter` and implement the abstract primitives.
 The base class provides useful default behavior for averaging,
 calibration offsets, streaming, and config persistence.
 """
+
 from __future__ import annotations
 
 import abc
@@ -74,7 +75,13 @@ class Multimeter(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def connect(self, resource: Optional[str] = None, *, simulate: bool = False, timeout_ms: Optional[int] = None) -> None:
+    def connect(
+        self,
+        resource: Optional[str] = None,
+        *,
+        simulate: bool = False,
+        timeout_ms: Optional[int] = None,
+    ) -> None:
         """Open a connection to `resource` (or start simulation).
 
         Implementations should set `self.connected` and `self.resource`.
@@ -130,12 +137,14 @@ class Multimeter(abc.ABC):
         """Convenience: set mode to resistance and measure.
 
         Returns (value, unit)."""
-        self.set_mode('OHM')
+        if self.mode != "OHM":
+            self.set_mode("OHM")
         return self.measure()
 
     def set_resistance_range(self, rng: str) -> None:
         """Set the resistance measurement range (e.g. 'AUTO', '5E3')."""
-        self.set_mode('OHM')
+        if self.mode != "OHM":
+            self.set_mode("OHM")
         self.set_range(rng)
 
     def measure_capacitance(self) -> Tuple[float, str]:
@@ -143,12 +152,14 @@ class Multimeter(abc.ABC):
 
         Returns (value, unit).
         """
-        self.set_mode('CAP')
+        if self.mode != "CAP":
+            self.set_mode("CAP")
         return self.measure()
 
     def set_capacitance_range(self, rng: str) -> None:
         """Set the capacitance measurement range (e.g. 'AUTO', '50E-9')."""
-        self.set_mode('CAP')
+        if self.mode != "CAP":
+            self.set_mode("CAP")
         self.set_range(rng)
 
     def get_mode(self) -> str:
@@ -202,7 +213,10 @@ class Multimeter(abc.ABC):
             path = "calibration.json"
         data: Dict[str, Any] = {
             "calibration": self.calibration,
-            "averaging": {"enabled": self.averaging_enabled, "count": self.averaging_count},
+            "averaging": {
+                "enabled": self.averaging_enabled,
+                "count": self.averaging_count,
+            },
             "profile": self.profile,
             "custom_cmds": self.custom_cmds,
         }
@@ -231,7 +245,9 @@ class Multimeter(abc.ABC):
             return
 
     # Simple streaming support
-    def start_stream(self, callback: Callable[[float, str], None], interval: float = 0.15) -> None:
+    def start_stream(
+        self, callback: Callable[[float, str], None], interval: float = 0.15
+    ) -> None:
         """Call `callback(value, unit)` periodically with measured values.
 
         The default implementation uses a background thread. Subclasses

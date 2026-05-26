@@ -5,9 +5,9 @@ import pyvisa
 rm = pyvisa.ResourceManager("@py")
 print(rm.list_resources())
 
-inst = rm.open_resource("USB0::0x0957::0x0007::INSTR")
-inst.timeout = 5000
-print(inst.query("*IDN?"))
+# inst = rm.open_resource("USB0::0x0957::0x0007::INSTR")
+# inst.timeout = 5000
+# print(inst.query("*IDN?"))
 
 # inst = rm.open_resource("ASRL/dev/cu.usbserial-1130::INSTR")
 # inst.baud_rate = 9600

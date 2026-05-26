@@ -1,2 +1,5 @@
 .zed/
 pyrightconfig.json
+dist/
+build/instrument_backend/
+instrument_backend.spec

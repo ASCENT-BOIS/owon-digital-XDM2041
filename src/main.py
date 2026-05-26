@@ -1,5 +1,5 @@
 # The main function, entry to entire program
-from .su_logging import start
+from su_logging import start
 
 
 def main():
