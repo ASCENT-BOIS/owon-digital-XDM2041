@@ -11,7 +11,7 @@ class DeviceController:
         self.countdown = 0
 
         # Configure text tags for colors
-        self.output.tag_config("connected", foreground="lime")
+        self.output.tag_config("connected", foreground="#00ff00")
         self.output.tag_config("error", foreground="red")
         self.output.tag_config("disconnected", foreground="yellow")
 
