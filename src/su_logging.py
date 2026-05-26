@@ -139,45 +139,53 @@ class DeviceController:
                 pass
 
             # Launch or relaunch meter GUI when device is detected
-            try:
-                import subprocess
-                import sys
-                from pathlib import Path
+            import os
+            import subprocess
+            import sys
+            import threading
+            from pathlib import Path
 
+            # 1. Determine the correct command and working directory
+            if getattr(sys, "frozen", False):
+                # PACKAGED MODE: Run the executable itself, pass a custom flag
+                cmd = [sys.executable, "--run-meter-gui"]
+                cwd = sys._MEIPASS  # PyInstaller's temporary extracted folder
+            else:
+                # DEVELOPMENT MODE: Standard Python module execution
                 project_root = Path(__file__).resolve().parent.parent
                 cmd = [sys.executable, "-m", "src.meter_gui"]
+                cwd = str(project_root)
 
-                def _start_proc():
-                    try:
-                        proc = subprocess.Popen(
-                            cmd,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            start_new_session=True,
-                            cwd=str(project_root),
-                        )
-                        self.gui_proc = proc
-                        self.gui_started = True
-                    except Exception:
-                        pass
+            # 2. Your original start process logic
+            def _start_proc():
+                try:
+                    proc = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                        cwd=cwd,
+                    )
+                    self.gui_proc = proc
+                    self.gui_started = True
+                except Exception as e:
+                    print(f"Failed to start GUI: {e}")
 
-                need_start = False
-                if not getattr(self, "gui_proc", None):
-                    need_start = True
-                else:
-                    try:
-                        if self.gui_proc.poll() is not None:
-                            need_start = True
-                    except Exception:
+            need_start = False
+            if not getattr(self, "gui_proc", None):
+                need_start = True
+            else:
+                try:
+                    if self.gui_proc.poll() is not None:
                         need_start = True
+                except Exception:
+                    need_start = True
 
-                if need_start:
-                    try:
-                        self.root.after(0, _start_proc)
-                    except Exception:
-                        threading.Thread(target=_start_proc, daemon=True).start()
-            except Exception:
-                pass
+            if need_start:
+                try:
+                    self.root.after(0, _start_proc)
+                except Exception:
+                    threading.Thread(target=_start_proc, daemon=True).start()
 
             try:
                 self.inst.close()
