@@ -163,7 +163,6 @@ class DeviceController:
                         cmd,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
-                        start_new_session=True,
                         cwd=cwd,
                     )
                     self.gui_proc = proc
